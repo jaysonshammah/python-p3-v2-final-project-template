@@ -1,5 +1,5 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlite3 import create_engine
+from sqlite3 import sessionmaker
 from models import Client, Account, Asset, Holdings
 
 # Create engine and session
