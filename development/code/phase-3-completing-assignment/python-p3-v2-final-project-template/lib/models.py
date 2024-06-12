@@ -1,48 +1,55 @@
-from sqlite3 import declarative_base, sessionmaker, relationship
-from sqlite3 import create_engine, Column, Integer, String, Float, Date, ForeignKey
+import sqlite3
 
-Base = declarative_base()
+# Connect to SQLite database
+conn = sqlite3.connect('FIMEA.db')
+cursor = conn.cursor()
 
-class Client(Base):
-    __tablename__ = 'clients'
+# Create tables
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS clients (
+    id INTEGER PRIMARY KEY,
+    first_name TEXT,
+    last_name TEXT,
+    email TEXT UNIQUE,
+    account_type TEXT
+)
+''')
 
-    id = Column(Integer(), primary_key=True)
-    first_name = Column(String())
-    last_name = Column(String())
-    email = Column(String(), unique=True)
-    account_type = Column(String())
-    accounts = relationship('Account', back_populates='client')
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS profile (
+    id INTEGER PRIMARY KEY,
+    account_number TEXT,
+    account_balance REAL,
+    client_id INTEGER,
+    FOREIGN KEY(client_id) REFERENCES clients(id)
+)
+''')
 
-class Account(Base):
-    __tablename__ = 'profile'
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS assets (
+    id INTEGER PRIMARY KEY,
+    type TEXT,
+    issuer_name TEXT,
+    current_price REAL,
+    maturity_date DATE
+)
+''')
 
-    id = Column(Integer(), primary_key=True)
-    account_number = Column(String())
-    account_balance = Column(Float())
-    client_id = Column(Integer(), ForeignKey('clients.id'))
-    client = relationship('Client', back_populates='accounts')
-    holdings = relationship('Holdings', back_populates='account')
-    
-class Asset(Base):
-    __tablename__ = 'assets'
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS holdings (
+    id INTEGER PRIMARY KEY,
+    account_id INTEGER,
+    asset_id INTEGER,
+    number_of_shares REAL,
+    purchase_price REAL,
+    purchase_date DATE,
+    client_id INTEGER,
+    FOREIGN KEY(account_id) REFERENCES profile(id),
+    FOREIGN KEY(asset_id) REFERENCES assets(id),
+    FOREIGN KEY(client_id) REFERENCES clients(id)
+)
+''')
 
-    id = Column(Integer(), primary_key=True)
-    type = Column(String())
-    issuer_name = Column(String())
-    current_price = Column(Float())
-    maturity_date = Column(Date())
-    holdings = relationship('Holdings', back_populates='asset')
-    clients = relationship('Client', secondary='holdings', overlaps="holdings")
-    
-class Holdings(Base):
-    __tablename__ = 'holdings'
-
-    id = Column(Integer(), primary_key=True)
-    account_id = Column(Integer(), ForeignKey('profile.id')) 
-    asset_id = Column(Integer(), ForeignKey('assets.id'))
-    number_of_shares = Column(Float())
-    purchase_price = Column(Float())
-    purchase_date = Column(Date())
-    account = relationship('Account', back_populates='holdings')
-    asset = relationship('Asset', back_populates='holdings', overlaps="clients")
-    client_id = Column(Integer(), ForeignKey('clients.id'))
+# Commit changes and close connection
+conn.commit()
+conn.close()

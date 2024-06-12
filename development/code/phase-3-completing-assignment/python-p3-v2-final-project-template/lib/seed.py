@@ -1,73 +1,89 @@
-from models import create_engine, sessionmaker, Base, Client, Account, Holdings, Asset
+import sqlite3
 from random import choice, randint
 from faker import Faker
 
-# Create session
-engine = create_engine('sqlite:///FIMEA.db')
-Base.metadata.create_all(engine)
-Session = sessionmaker(bind=engine)
-session = Session()
-
-# Initialize faker for the fake data
+# Initialize Faker
 fake = Faker()
 
-# Add data to the Client and Account tables
-print("Seeding clients")
-for i in range(10):
-    client = Client(
-        first_name=fake.first_name(),
-        last_name=fake.last_name(),
-        email=fake.email(),
-        account_type=choice(['Savings', 'Checking', 'Investment'])
-    )
-    session.add(client)
-    print("All clients seeded")
+# Connect to the SQLite database
+conn = sqlite3.connect('FIMEA.db')
+cursor = conn.cursor()
 
-    print("Seeding Account data")
-    for client in session.query(Client).all():
-        for i in range(randint(1, 3)):
-            account = Account(
-                account_number=fake.random_int(min=10000000, max=99999999),
-                account_balance=randint(1000, 100000),
-                client=client
-            )
-            session.add(account)
-    print("All Accounts seeded")
+# Seed clients
+print("Seeding clients...")
+clients = []
+for _ in range(10):
+    first_name = fake.first_name()
+    last_name = fake.last_name()
+    email = fake.email()
+    account_type = choice(['Savings', 'Checking', 'Investment'])
+    cursor.execute('''
+        INSERT INTO client (first_name, last_name, email, account_type)
+        VALUES (?, ?, ?, ?)
+    ''', (first_name, last_name, email, account_type))
+    client_id = cursor.lastrowid
+    clients.append(client_id)
+print("All clients seeded.")
 
-# Add data to the Assets and Holdings tables
-print("Seeding Asset data")
+# Seed accounts
+print("Seeding accounts...")
+for client_id in clients:
+    for _ in range(randint(1, 3)):
+        account_number = fake.random_int(min=10000000, max=99999999)
+        account_balance = randint(1000, 100000)
+        cursor.execute('''
+            INSERT INTO account (account_number, account_balance, client_id)
+            VALUES (?, ?, ?)
+        ''', (account_number, account_balance, client_id))
+print("All accounts seeded.")
+
+# Seed assets
+print("Seeding assets...")
 asset_types = ['Stock', 'Bond', 'ETF']
-clients = session.query(Client).all()
-for i in range(10):
-    asset = Asset(
-        type=choice(asset_types),
-        issuer_name=fake.company(),
-        current_price=randint(10, 1000),
-        maturity_date=fake.date_between(start_date='-1y', end_date='+1y')
-    )
-    # Associate a random client with the asset
-    if clients:
-        asset.clients.append(choice(clients))
-    session.add(asset)
-    print("All Assets seeded")
+assets = []
+for _ in range(10):
+    type = choice(asset_types)
+    issuer_name = fake.company()
+    current_price = randint(10, 1000)
+    maturity_date = fake.date_between(start_date='-1y', end_date='+1y').isoformat()
+    cursor.execute('''
+        INSERT INTO asset (type, issuer_name, current_price, maturity_date)
+        VALUES (?, ?, ?, ?)
+    ''', (type, issuer_name, current_price, maturity_date))
+    asset_id = cursor.lastrowid
+    assets.append(asset_id)
+print("All assets seeded.")
 
-    print("Seeding Holdings data")
-    for asset in session.query(Asset).all():
-        accounts = session.query(Account).filter(Account.client_id.in_([c.id for c in asset.clients])).all()
-        if accounts:
-            account = choice(accounts)
-            holding = Holdings(
-                account=account,
-                asset=asset,
-                number_of_shares=randint(1, 100),
-                purchase_price=randint(10, 1000),
-                purchase_date=fake.date_between(start_date='-1y', end_date='today')
-            )
-            session.add(holding)
-    print("All Holdings data seeded")
+# Associate assets with random clients
+print("Associating assets with clients...")
+for asset_id in assets:
+    client_id = choice(clients)
+    cursor.execute('''
+        INSERT INTO client_asset (client_id, asset_id)
+        VALUES (?, ?)
+    ''', (client_id, asset_id))
 
-print("All data seeded")
+# Seed holdings
+print("Seeding holdings...")
+for asset_id in assets:
+    cursor.execute('SELECT client_id FROM client_asset WHERE asset_id=?', (asset_id,))
+    client_ids = [row[0] for row in cursor.fetchall()]
+    if client_ids:
+        client_id = choice(client_ids)
+        cursor.execute('SELECT id FROM account WHERE client_id=?', (client_id,))
+        account_ids = [row[0] for row in cursor.fetchall()]
+        if account_ids:
+            account_id = choice(account_ids)
+            number_of_shares = randint(1, 100)
+            purchase_price = randint(10, 1000)
+            purchase_date = fake.date_between(start_date='-1y', end_date='today').isoformat()
+            cursor.execute('''
+                INSERT INTO holdings (account_id, asset_id, number_of_shares, purchase_price, purchase_date)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (account_id, asset_id, number_of_shares, purchase_price, purchase_date))
+print("All holdings seeded.")
 
-# Commit changes and close session
-session.commit()
-session.close()
+# Commit and close
+conn.commit()
+conn.close()
+print("All data seeded.")
